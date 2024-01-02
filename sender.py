@@ -17,4 +17,4 @@ signal = packager.package(data)
 
 # plot_signal(signal)
 
-signal_to_wav("test.wav", signal, 48000)
+signal_to_wav("output.wav", signal, 48000)
