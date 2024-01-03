@@ -1,15 +1,18 @@
 import numpy as np
 
+
 class BaseConfig:
-    def __init__(self, sampling_freq: float, amplitude: float, signal_duration: float) -> None:
+    def __init__(
+        self, sampling_freq: float, amplitude: float, signal_duration: float
+    ) -> None:
         self.sampling_freq = sampling_freq
         self.amplitude = amplitude
         self.signal_duration = signal_duration
 
+
 class BaseModulator:
     def __init__(self, **kwargs):
-        """初始化调制器
-        """
+        """初始化调制器"""
         pass
 
     def modulate(self, data: np.ndarray) -> np.ndarray:
@@ -25,7 +28,6 @@ class BaseModulator:
             np.ndarray: 调制好的信号
         """
         raise NotImplementedError
-
 
     def demodulate(self, signal: np.ndarray) -> np.ndarray:
         """解调信号
