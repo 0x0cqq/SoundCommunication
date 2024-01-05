@@ -1,23 +1,24 @@
 import argparse
 from calendar import c
 
-from coder.coder import Coder
-from modulator.FSK import FSKConfig
-from modulator.FSK import FSKModulator
-from packager.base import Packager
+from src.coder import Coder
+from src.modulator import ModulateConfig
+from src.modulator import Modulator
+from src.packager import FSKPackager
 from utils.plot_utils import plot_signal
 from utils.wav_utils import record_to_wav, signal_to_wav, wav_to_signal
 
 
-config = FSKConfig(
+config = ModulateConfig(
     sampling_freq=48000,
     amplitude=1,
     signal_duration=0.025,
     carrier_freq=10000,
-    freq_shift=100,
+    freq_width=100,
+    bits_per_signal=1,
 )
-modulator = FSKModulator(config)
-packager = Packager(None, modulator)
+modulator = Modulator(config)
+packager = FSKPackager(modulator)
 coder = Coder()
 
 
@@ -35,7 +36,7 @@ if __name__ == "__main__":
         # plot_signal(signal[:1000000])
         signal_to_wav("output.wav", signal, 48000)
     elif args.mode == "receive":
-        record_to_wav("received.wav", 48000, 5)
+        # record_to_wav("received.wav", 48000, 5)
         signal = wav_to_signal("received.wav")
         plot_signal(signal)
         data = packager.unpackage(signal)

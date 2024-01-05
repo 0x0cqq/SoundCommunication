@@ -8,7 +8,7 @@ from matplotlib import pyplot as plt
 
 
 def DFT(x: np.ndarray, r: int = 1) -> np.ndarray:
-    fft_x = fft.fft(x, r * len(x))
+    fft_x = fft.fft(x, r * len(x), norm="forward")
     # 将负频率放到左侧
     fft_x = np.abs(np.fft.fftshift(fft_x))
     return fft_x
@@ -23,41 +23,48 @@ def get_fft_freq(N: int, r: int, sampling_freq: float):
 
 def get_most_likely_freq(signal: np.ndarray, sampling_freq: float, r: int) -> float:
     N = len(signal)
+    # 进行一个 DFT
     signal_fft = DFT(signal, r)
     freq = get_fft_freq(N, r, sampling_freq)
-    # add the absolute value of the negative frequency to the positive frequency
+    # 把负频率的部分加到正频率上
     N_fft = len(signal_fft)
     signal_fft += signal_fft[::-1]
-    # remove the negative frequency at the left
     signal_fft = signal_fft[N_fft // 2 :]
     freq = freq[N_fft // 2 :]
-    # plt.cla()
-    # plt.clf()
-    # plt.plot(freq, signal_fft)
-    # plt.show()
-    # do a smooth
+    # 进行一个 smooth
     signal_fft = sig.savgol_filter(signal_fft, 5, 2)
-    # plt.cla()
-    # plt.clf()
-    # plt.plot(freq, signal_fft)
+    # 找到最大值
     max_index = np.argmax(signal_fft)
-    # plt.axvline(x=freq[max_index], color="r")
-    # plt.show()
-    # find the most likely frequency
     return freq[max_index]
 
-def get_frequency_density(signal: np.ndarray, sampling_freq: float, r: int, freq: float) -> float:
+def get_frequency_density(signal: np.ndarray, sampling_freq: float, r: int, freq: float, width: float) -> float:
     N = len(signal)
     signal_fft = DFT(signal, r)
     freq_array = get_fft_freq(N, r, sampling_freq)
-    # add the absolute value of the negative frequency to the positive frequency
     N_fft = len(signal_fft)
     signal_fft += signal_fft[::-1]
-    # remove the negative frequency at the left
     signal_fft = signal_fft[N_fft // 2 :]
     freq_array = freq_array[N_fft // 2 :]
     # do a smooth
     signal_fft = sig.savgol_filter(signal_fft, 5, 2)
     # find the most likely frequency
-    return signal_fft[np.argmin(np.abs(freq_array - freq))]
+    index_low = np.argmin(np.abs(freq_array - (freq - width)))
+    index_high = np.argmin(np.abs(freq_array - (freq + width)))
+    # print(f"index_low: {index_low}, index_high: {index_high}")
+    # 获取该频段的能量占比，功率和幅度平方成正比
+    return np.sum(signal_fft[index_low:index_high] ** 2) / np.sum(signal_fft ** 2)
 
+# 端序：小端序
+def read_packed_bits(num: int, bits: int) -> list:
+    res = []
+    for i in range(bits):
+        res.append(num % 2)
+        num //= 2
+    return res[::-1]
+
+# 端序：小端序
+def output_packed_bits(data: list) -> int:
+    res = 0
+    for i in range(len(data)):
+        res = res * 2 + data[i]
+    return res
