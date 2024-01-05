@@ -1,4 +1,5 @@
 from typing import Callable, Tuple
+from utils.code_utils import gray_code, index_to_code
 
 from utils.signal_utils import (
     get_frequency_density,
@@ -27,15 +28,20 @@ class ModulateConfig:
         self.carrier_freq = carrier_freq
         self.freq_width = freq_width  # 这个宽度是单边的
         # 这里是频移的量，均分到每个 bit 上
-        self.freq_shift = []
+        self.freq_shift = np.zeros(2**bits_per_signal, dtype=np.float32)
+        gray_codes = gray_code(2, bits_per_signal)
         for i in range(2**bits_per_signal):
-            self.freq_shift.append(
-                ((i / (2**bits_per_signal - 1) * 2) - 1) * freq_width
-            )
+            code = gray_codes[i]
+            index = int(code, 2)
 
-        
-        # print(f"freq_shift: {self.freq_shift}")
-        assert freq_width / (2**bits_per_signal - 1) >= 10, "频率分辨率过低, 请增大 freq_width 或者减小 bits_per_signal"
+            self.freq_shift[index] = (
+                (i / (2**bits_per_signal - 1) * 2) - 1
+            ) * freq_width
+
+        print(f"freq_shift: {self.freq_shift.round(2)}")
+        assert (
+            freq_width / (2**bits_per_signal - 1) >= 10
+        ), "频率分辨率过低, 请增大 freq_width 或者减小 bits_per_signal"
         self.bits_per_signal = bits_per_signal
 
         self.single_signal_len = int(self.signal_duration * self.sampling_freq)
@@ -77,12 +83,12 @@ class Modulator:
 
         return signal
 
-    def get_power_for_index(self, signal: np.ndarray, index: int) -> float:
+    def get_power_for_index(self, signal: np.ndarray, index: int, r: int = 10) -> float:
         signal_width = self.config.freq_width * 2 / (2**self.config.bits_per_signal)
         return get_frequency_density(
             signal,
             self.config.sampling_freq,
-            10,
+            r,
             self.config.carrier_freq + self.config.freq_shift[index],
             signal_width / 2,
         )
@@ -104,7 +110,7 @@ class Modulator:
             this_signal = signal[start:end]
             # 取到最大功率的频率
             most_likely_freq = get_most_likely_freq(
-                this_signal, self.config.sampling_freq, 10
+                this_signal, self.config.sampling_freq, 16
             )
             max_freq_from_most_likely_freq = np.argmin(
                 np.abs(
@@ -113,18 +119,36 @@ class Modulator:
                     - most_likely_freq
                 )
             )
-            print(f"most likely freq: {most_likely_freq}, error: {np.abs(self.config.freq_shift[max_freq_from_most_likely_freq] + self.config.carrier_freq - most_likely_freq)}")
+            # print(f"most likely freq: {most_likely_freq}, error: {np.abs(self.config.freq_shift[max_freq_from_most_likely_freq] + self.config.carrier_freq - most_likely_freq)}")
 
             # 计算和哪个信号最接近
             powers = [
-                self.get_power_for_index(this_signal, j)
+                self.get_power_for_index(this_signal, j, 16)
                 for j in range(2**self.config.bits_per_signal)
             ]
-            print(f"powers for {i}: {[round(i, 2) for i in powers]}")
+            # print(f"powers for {i}: {[round(i, 2) for i in powers]}")
             max_freq = np.argmax(powers)
 
             if max_freq != max_freq_from_most_likely_freq:
                 print("信号解调不一致，很可能错误")
+                max_freq_error = np.abs(
+                    self.config.freq_shift[max_freq_from_most_likely_freq]
+                    + self.config.carrier_freq
+                    - most_likely_freq
+                )
+                if (
+                    max_freq_error
+                    < self.config.freq_width / (2**self.config.bits_per_signal) * 0.66
+                    and powers[max_freq] <= 0.4
+                ):
+                    max_freq = max_freq_from_most_likely_freq
+                    print(
+                        f"使用频率最大似然解码, error: {max_freq_error}, power: {powers[max_freq]}"
+                    )
+                else:
+                    print(
+                        f"使用最大功率的频率区间解码, error: {max_freq_error}, power: {powers[max_freq]}"
+                    )
 
             # 获得概率
             prob = powers / np.sum(powers)

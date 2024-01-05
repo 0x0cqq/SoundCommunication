@@ -57,24 +57,15 @@ class FSKPackager:
 
     def unpackage(self, signal: np.ndarray) -> np.ndarray:
         single_signal_len = self.modulator.config.single_signal_len
-        # 先进行一个滤波
-        carrier_freq = self.modulator.config.carrier_freq
-        freq_width = self.modulator.config.freq_width
-        # b, a = sig.iirfilter(
-        #     3,
-        #     [carrier_freq - freq_width * 2, carrier_freq + freq_width * 2],
-        #     btype="bandpass",
-        #     fs=self.modulator.config.sampling_freq,
-        # )
-
-        # signal = sig.lfilter(b, a, signal)
 
         datapoint_per_signal = 8
 
-        datapoint_span = single_signal_len // datapoint_per_signal 
+        datapoint_span = single_signal_len // datapoint_per_signal
         signal_match = np.zeros(len(signal) // datapoint_span + 1)
 
-        packed_preamble = output_packed_list(self.preamble, self.modulator.config.bits_per_signal)
+        packed_preamble = output_packed_list(
+            self.preamble, self.modulator.config.bits_per_signal
+        )
         print(packed_preamble)
 
         for i in range(0, len(signal), datapoint_span):
@@ -82,7 +73,9 @@ class FSKPackager:
             if i + single_signal_len * len(packed_preamble) > len(signal):
                 break
             for j in range(len(packed_preamble)):
-                pos_signal = signal[i + j * single_signal_len : i + (j + 1) * single_signal_len]
+                pos_signal = signal[
+                    i + j * single_signal_len : i + (j + 1) * single_signal_len
+                ]
                 local_match += self.modulator.get_power_for_index(
                     pos_signal, packed_preamble[j]
                 )
@@ -94,20 +87,22 @@ class FSKPackager:
         plt.clf()
         plt.plot(signal_match)
 
-
         # 用相对极值点来找到 preamble 的位置
-        signal_start = sig.argrelextrema(signal_match, np.greater, order = datapoint_per_signal * len(packed_preamble))[0]
+        signal_start = sig.argrelextrema(
+            signal_match, np.greater, order=datapoint_per_signal * len(packed_preamble)
+        )[0]
 
         signal_start = filter(lambda x: signal_match[x] > 0.5, signal_start)
         signal_start = list(signal_start)
         assert len(signal_start) != 0, f"频谱法没有找到 preamble"
-        signal_start_value = signal_start[0] * datapoint_span + single_signal_len * len(packed_preamble)
+        signal_start_value = signal_start[0] * datapoint_span + single_signal_len * len(
+            packed_preamble
+        )
 
         # print(signal_start)
 
         plt.axvline(x=signal_start[0], color="r")
         plt.show()
-
 
         # 构建一个 preamble
         modulated_preamble = self.modulator.modulate(self.preamble)
@@ -131,12 +126,13 @@ class FSKPackager:
                 break
         assert found_start, "卷积法没有找到 preamble"
 
-
         start += len(modulated_preamble) // 2
 
         plot_signal(convolved_signal, lines=[start, signal_start_value])
 
-        assert np.abs(start - signal_start_value) <= single_signal_len / 2, f"preamble 的位置不一致"
+        assert (
+            np.abs(start - signal_start_value) <= single_signal_len / 2
+        ), f"preamble 的位置不一致"
 
         # 取得 data_len
         len_data, _ = self.modulator.demodulate(
@@ -148,6 +144,18 @@ class FSKPackager:
         dataload_len = output_packed_bits(len_data)
 
         print(f"数据长度为 {dataload_len}...")
+
+        # 先进行一个滤波
+        carrier_freq = self.modulator.config.carrier_freq
+        freq_width = self.modulator.config.freq_width
+        b, a = sig.iirfilter(
+            5,
+            carrier_freq / 2,
+            btype="highpass",
+            fs=self.modulator.config.sampling_freq,
+        )
+
+        signal = sig.lfilter(b, a, signal)
 
         # 取得 data
         start += (
@@ -166,10 +174,11 @@ class FSKPackager:
         plt.show()
 
         # 取得 parity
-        start = start + single_signal_len * dataload_len // self.modulator.config.bits_per_signal
-        parity, _ = self.modulator.demodulate(
-            signal[start: ], 1
+        start = (
+            start
+            + single_signal_len * dataload_len // self.modulator.config.bits_per_signal
         )
+        parity, _ = self.modulator.demodulate(signal[start:], 1)
 
         # 校验
         # assert sum(data) % 2 == parity, "校验失败"
