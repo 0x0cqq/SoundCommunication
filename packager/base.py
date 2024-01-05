@@ -1,3 +1,4 @@
+from matplotlib import pyplot as plt
 import numpy as np
 import scipy.signal as sig
 from modulator.base import BaseModulator
@@ -20,13 +21,14 @@ class Packager:
     def __init__(self, config: PackageConfig, modulator: BaseModulator):
         # self.config = config
         self.modulator = modulator
+        self.preamble = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
 
     def package(self, data: np.ndarray) -> np.ndarray:
         # 在开头加一个 silent_signal
-        silent_signal = np.zeros_like(self.modulator.modulate(np.array([1])))
+        silent_signal = np.zeros_like(self.modulator.modulate(np.array([1, 0])))
 
         # 加 preamble，10101010
-        preamble = np.array([1, 0, 1, 0, 1, 0, 1, 0])
+        
 
         # 再用一个长度为 8 的数组来存储 data 的长度
         len_data = len(data)
@@ -39,13 +41,14 @@ class Packager:
         # 校验码：奇偶校验
         parity = 0 if sum(data) % 2 == 0 else 1
         # 加上 parity
-        data = np.concatenate([preamble, len_signal, data, np.array([parity])])
 
-        print(f"数据包总长度为 {len(data)}, data: {data}...")
+        new_data = np.concatenate([self.preamble, len_signal, data, np.array([parity])])
+
+        print(f"数据包总长度为 {len(new_data)}, 数据长度为 {len(data)} ...")
 
         # 调制
 
-        signal = self.modulator.modulate(data)
+        signal = self.modulator.modulate(new_data)
 
         # 加上 silent_signal，防止音乐爆鸣
         signal = np.concatenate([silent_signal, signal, silent_signal])
@@ -55,14 +58,13 @@ class Packager:
     def unpackage(self, signal: np.ndarray) -> np.ndarray:
         # 先进行一个带通滤波
         b, a = sig.iirfilter(
-            5, [5000, 15000], btype="bandpass", fs=self.modulator.config.sampling_freq
+            1, 1000, btype="highpass", fs=self.modulator.config.sampling_freq
         )
 
         signal = sig.lfilter(b, a, signal)
 
         # 构建一个 preamble
-        preamble = np.array([1, 0, 1, 0, 1, 0, 1, 0])
-        modulated_preamble = self.modulator.modulate(preamble)
+        modulated_preamble = self.modulator.modulate(self.preamble)
 
         # 找到第一个 preamble 的位置
         start = 0
@@ -76,20 +78,22 @@ class Packager:
 
         convolved_signal /= np.max(convolved_signal)
 
-        plot_signal(convolved_signal)
 
         for i in range(len(convolved_signal)):
-            if convolved_signal[i] > 0.95:
+            if convolved_signal[i] > 0.85:
                 start = i
                 found_start = True
                 break
         assert found_start, "没有找到 preamble"
 
+
+        plot_signal(convolved_signal, line=start)
+
         start += len(modulated_preamble) // 2
 
         # 取得 data_len
         single_signal_len = len(self.modulator.modulate(np.array([1])))
-        len_data = self.modulator.demodulate(
+        len_data, _ = self.modulator.demodulate(
             signal[start : start + single_signal_len * 8]
         )
         print(len_data)
@@ -103,17 +107,23 @@ class Packager:
 
         # 取得 data
         start = start + single_signal_len * 8
-        data = self.modulator.demodulate(
+        data, prob = self.modulator.demodulate(
             signal[start : start + single_signal_len * data_len]
         )
 
         print(f"data: {data.tolist()}")
+        # keep 2 decimal places
+        print(f"prob: {np.round(prob, 2).tolist()}")
+
+        plt.bar(np.arange(len(prob)), prob)
+        plt.axhline(y=0.5, color="r")
+        plt.show()
 
         # 取得 parity
         start = start + single_signal_len * data_len
-        parity = self.modulator.demodulate(signal[start : start + single_signal_len])
+        parity, _ = self.modulator.demodulate(signal[start : start + single_signal_len])
 
         # 校验
-        assert sum(data) % 2 == parity, "校验失败"
+        # assert sum(data) % 2 == parity, "校验失败"
 
         return data

@@ -3,12 +3,16 @@ import matplotlib.pyplot as plt
 from scipy import fft, signal as sig
 from matplotlib import pyplot as plt
 
+from utils.signal_utils import DFT, get_fft_freq
+
 
 # 画出信号
-def plot_signal(signal: np.ndarray, title: str = "", save: bool = False):
+def plot_signal(signal: np.ndarray, title: str = "", save: bool = False, line:int = -1):
     plt.clf()
     plt.cla()
     plt.plot(signal)
+    if line != -1:
+        plt.axvline(x=line, color="r")
     plt.title(title)
     plt.show()
     title = title.replace(" ", "_")
@@ -28,12 +32,10 @@ def plot_freq(
     plt.cla()
     # f is the frequency array, the zero is in the middle
     N = len(signal)
-    f = np.linspace(-r * N / 2, r * N / 2 - 1, r * N) * sampling_freq / (r * N)
-    # smaller point
-    signal_fft = fft.fft(signal, r * N)
-    signal_fft = fft.fftshift(signal_fft)
-    signal_fft = np.abs(signal_fft)
-    f /= 1000
+
+    signal_fft = DFT(signal, r)
+
+    f = get_fft_freq(N, r, sampling_freq) / 1000
 
     plt.scatter(f, signal_fft, s=0.1)
     plt.xlabel("Frequency[kHz]")

@@ -1,5 +1,5 @@
 import numpy as np
-
+from typing import Tuple
 
 class BaseConfig:
     def __init__(
@@ -29,7 +29,7 @@ class BaseModulator:
         """
         raise NotImplementedError
 
-    def demodulate(self, signal: np.ndarray) -> np.ndarray:
+    def demodulate(self, signal: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """解调信号
 
         Args:
