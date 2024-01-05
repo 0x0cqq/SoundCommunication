@@ -30,9 +30,15 @@ class ModulateConfig:
         self.freq_shift = []
         for i in range(2**bits_per_signal):
             self.freq_shift.append(
-                (i + 1) * (2 * freq_width) / (2**bits_per_signal) - freq_width
+                ((i / (2**bits_per_signal - 1) * 2) - 1) * freq_width
             )
+
+        
+        # print(f"freq_shift: {self.freq_shift}")
+        assert freq_width / (2**bits_per_signal - 1) >= 10, "频率分辨率过低, 请增大 freq_width 或者减小 bits_per_signal"
         self.bits_per_signal = bits_per_signal
+
+        self.single_signal_len = int(self.signal_duration * self.sampling_freq)
 
 
 class Modulator:
@@ -43,8 +49,6 @@ class Modulator:
         # 首先用 [0] padding 到 bits 对齐
         while len(data) % self.config.bits_per_signal != 0:
             data: np.ndarray = np.concatenate([data, np.array([0])])
-        # 时间
-        T = np.arange(0, self.config.signal_duration, 1 / self.config.sampling_freq)
 
         # 生成频率序列
         frequency = []
@@ -54,8 +58,9 @@ class Modulator:
             signal_value = output_packed_bits(data[i : i + self.config.bits_per_signal])
             # 生成信号
             frequency.append(
-                np.full_like(
-                    T, self.config.carrier_freq + self.config.freq_shift[signal_value]
+                np.full(
+                    self.config.single_signal_len,
+                    self.config.carrier_freq + self.config.freq_shift[signal_value],
                 )
             )
 
@@ -72,13 +77,26 @@ class Modulator:
 
         return signal
 
-    def demodulate(self, signal: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def get_power_for_index(self, signal: np.ndarray, index: int) -> float:
+        signal_width = self.config.freq_width * 2 / (2**self.config.bits_per_signal)
+        return get_frequency_density(
+            signal,
+            self.config.sampling_freq,
+            10,
+            self.config.carrier_freq + self.config.freq_shift[index],
+            signal_width / 2,
+        )
+
+    def demodulate(
+        self, signal: np.ndarray, signal_num: int = -1
+    ) -> Tuple[np.ndarray, np.ndarray]:
         # 输入的 signal 是已经去掉了前导和后导的
         # 单个信号的长度
-        T = np.arange(0, self.config.signal_duration, 1 / self.config.sampling_freq)
-        signal_len = len(T)
+        signal_len = self.config.single_signal_len
         # 信号的个数
-        signal_num = round(len(signal) / signal_len)
+        signal_num = int(signal_num)
+        if signal_num == -1:
+            signal_num = round(len(signal) / signal_len)
         data = []
         probs = []
         for i in range(signal_num):
@@ -88,24 +106,28 @@ class Modulator:
             most_likely_freq = get_most_likely_freq(
                 this_signal, self.config.sampling_freq, 10
             )
-            # 计算和哪个信号最接近
-            signal_width = (
-                self.config.freq_width * 2 / (2**self.config.bits_per_signal)
-            )
-            powers = [
-                get_frequency_density(
-                    this_signal,
-                    self.config.sampling_freq,
-                    10,
-                    self.config.carrier_freq + self.config.freq_shift[j],
-                    signal_width / 2,
+            max_freq_from_most_likely_freq = np.argmin(
+                np.abs(
+                    np.array(self.config.freq_shift)
+                    + self.config.carrier_freq
+                    - most_likely_freq
                 )
+            )
+            print(f"most likely freq: {most_likely_freq}, error: {np.abs(self.config.freq_shift[max_freq_from_most_likely_freq] + self.config.carrier_freq - most_likely_freq)}")
+
+            # 计算和哪个信号最接近
+            powers = [
+                self.get_power_for_index(this_signal, j)
                 for j in range(2**self.config.bits_per_signal)
             ]
-            print(f"powers for {i}: {powers}")
+            print(f"powers for {i}: {[round(i, 2) for i in powers]}")
             max_freq = np.argmax(powers)
-            # softmax 获得概率
-            prob = np.exp(powers) / np.sum(np.exp(powers))
+
+            if max_freq != max_freq_from_most_likely_freq:
+                print("信号解调不一致，很可能错误")
+
+            # 获得概率
+            prob = powers / np.sum(powers)
 
             # 解到二进制
             this_data = read_packed_bits(max_freq, self.config.bits_per_signal)

@@ -7,12 +7,13 @@ from utils.signal_utils import DFT, get_fft_freq
 
 
 # 画出信号
-def plot_signal(signal: np.ndarray, title: str = "", save: bool = False, line:int = -1):
+def plot_signal(signal: np.ndarray, title: str = "", save: bool = False, lines: list[float] = []):
     plt.clf()
     plt.cla()
     plt.plot(signal)
-    if line != -1:
-        plt.axvline(x=line, color="r")
+    colors = ["r", "g", "b", "y", "m", "c", "k"]
+    for index, line in enumerate(lines):
+        plt.axvline(x=line, color=colors[index % len(colors)], linestyle="--", linewidth=0.5)
     plt.title(title)
     plt.show()
     title = title.replace(" ", "_")

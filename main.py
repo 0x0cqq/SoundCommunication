@@ -14,8 +14,8 @@ config = ModulateConfig(
     amplitude=1,
     signal_duration=0.025,
     carrier_freq=10000,
-    freq_width=100,
-    bits_per_signal=1,
+    freq_width=800,
+    bits_per_signal=4,
 )
 modulator = Modulator(config)
 packager = FSKPackager(modulator)
@@ -30,13 +30,12 @@ parser.add_argument("--mode", type=str, help="send or receive", default="send", 
 if __name__ == "__main__":
     args = parser.parse_args()
     if args.mode == "send":
-        string_literal = "Hello, World!"
+        string_literal = "Hello, World! This is a test from FSK! Glad to hear that you can receive this message! Hopefully you can decode this message!"
         data = coder.encode(string_literal)
         signal = packager.package(data)
-        # plot_signal(signal[:1000000])
         signal_to_wav("output.wav", signal, 48000)
     elif args.mode == "receive":
-        # record_to_wav("received.wav", 48000, 5)
+        record_to_wav("received.wav", 48000, 10)
         signal = wav_to_signal("received.wav")
         plot_signal(signal)
         data = packager.unpackage(signal)

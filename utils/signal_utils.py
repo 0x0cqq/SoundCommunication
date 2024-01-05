@@ -68,3 +68,10 @@ def output_packed_bits(data: list) -> int:
     for i in range(len(data)):
         res = res * 2 + data[i]
     return res
+
+def output_packed_list(data: list, bits: int) -> list:
+    assert len(data) % bits == 0, f"len(data) = {len(data)}, bits = {bits}, len(data) % bits = {len(data) % bits} != 0"
+    res = []
+    for i in range(0, len(data), bits):
+        res.append(output_packed_bits(data[i : i + bits]))
+    return res
