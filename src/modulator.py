@@ -31,8 +31,10 @@ class ModulateConfig:
         self.freq_shift = np.zeros(2**bits_per_signal, dtype=np.float32)
         gray_codes = gray_code(2, bits_per_signal)
         for i in range(2**bits_per_signal):
-            code = gray_codes[i]
-            index = int(code, 2)
+            # code = gray_codes[i]
+            # index = int(code, 2)
+
+            index = i
 
             self.freq_shift[index] = (
                 (i / (2**bits_per_signal - 1) * 2) - 1
@@ -73,7 +75,7 @@ class Modulator:
         frequency = np.concatenate(frequency)
 
         # 对频率序列做高斯滤波
-        frequency = ndimage.gaussian_filter(frequency, 4)
+        frequency = ndimage.gaussian_filter(frequency, 6)
 
         # 计算相位
         phase = np.cumsum(2 * np.pi * frequency / self.config.sampling_freq)
@@ -94,7 +96,7 @@ class Modulator:
         )
 
     def demodulate(
-        self, signal: np.ndarray, signal_num: int = -1
+        self, signal: np.ndarray, signal_num: int = -1, verbose: bool = False
     ) -> Tuple[np.ndarray, np.ndarray]:
         # 输入的 signal 是已经去掉了前导和后导的
         # 单个信号的长度
@@ -119,13 +121,17 @@ class Modulator:
                     - most_likely_freq
                 )
             )
-            # print(f"most likely freq: {most_likely_freq}, error: {np.abs(self.config.freq_shift[max_freq_from_most_likely_freq] + self.config.carrier_freq - most_likely_freq)}")
+                
 
             # 计算和哪个信号最接近
             powers = [
                 self.get_power_for_index(this_signal, j, 16)
                 for j in range(2**self.config.bits_per_signal)
             ]
+            if verbose:
+                print(f"i: {i}")
+                print(f"\tmost likely freq: {most_likely_freq}, error: {np.abs(self.config.freq_shift[max_freq_from_most_likely_freq] + self.config.carrier_freq - most_likely_freq)}")
+                print(f"\tpowers: {powers}")
             # print(f"powers for {i}: {[round(i, 2) for i in powers]}")
             max_freq = np.argmax(powers)
 
@@ -139,8 +145,8 @@ class Modulator:
                 if (
                     max_freq_error
                     < self.config.freq_width / (2**self.config.bits_per_signal) * 0.66
-                    and powers[max_freq] <= 0.4
-                ):
+                    and powers[max_freq] <= 0.5
+                ) or max_freq_error < self.config.freq_width / (2**self.config.bits_per_signal) * 0.10:
                     max_freq = max_freq_from_most_likely_freq
                     print(
                         f"使用频率最大似然解码, error: {max_freq_error}, power: {powers[max_freq]}"

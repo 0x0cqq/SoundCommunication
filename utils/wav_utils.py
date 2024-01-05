@@ -27,7 +27,7 @@ def record_to_signal(sampling_freq: float, time: float) -> np.ndarray:
     )
     # read the data by frames
     frames = []
-    print(f"Recording for {time} second...", flush=True)
+    print(f"Recording for {time.__round__(2)} second...", flush=True)
     for _ in range(0, int(sampling_freq / 1024 * time)):
         data = stream.read(1024)
         frames.append(data)

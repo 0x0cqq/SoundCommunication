@@ -28,9 +28,7 @@ class FSKPackager:
 
     def package(self, data: np.ndarray) -> np.ndarray:
         # 在开头加一个 silent_signal
-        silent_signal = np.zeros(self.modulator.config.single_signal_len * 4)
-
-        # 加 preamble，10101010
+        silent_signal = np.zeros(self.modulator.config.single_signal_len * 2)
 
         # 再用一个长度为 8 的数组来存储 data 的长度
         len_data = len(data)
@@ -42,7 +40,7 @@ class FSKPackager:
         # 加上 parity
 
         total_data = np.concatenate(
-            [self.preamble, len_signal, data, np.array([parity])]
+            [self.preamble, [len_signal[0]] * self.modulator.config.bits_per_signal, len_signal, data, np.array([parity])]
         )
 
         print(f"数据包总长度为 {len(total_data)}, 数据负载长度为 {len(data)} ...")
@@ -89,20 +87,24 @@ class FSKPackager:
 
         # 用相对极值点来找到 preamble 的位置
         signal_start = sig.argrelextrema(
-            signal_match, np.greater, order=datapoint_per_signal * len(packed_preamble)
+            signal_match, np.greater, order=datapoint_per_signal * len(packed_preamble) // 2
         )[0]
 
-        signal_start = filter(lambda x: signal_match[x] > 0.5, signal_start)
+        signal_start = filter(lambda x: signal_match[x] >= 0.5, signal_start)
         signal_start = list(signal_start)
-        assert len(signal_start) != 0, f"频谱法没有找到 preamble"
-        signal_start_value = signal_start[0] * datapoint_span + single_signal_len * len(
-            packed_preamble
-        )
+        # assert len(signal_start) != 0, f"频谱法没有找到 preamble"
+        if len(signal_start) == 0:
+            signal_start_value = -1
+        else:
+            signal_start_value = signal_start[0] * datapoint_span + single_signal_len * len(
+                packed_preamble
+            )
 
         # print(signal_start)
 
-        plt.axvline(x=signal_start[0], color="r")
-        plt.show()
+        if len(signal_start) != 0:
+            plt.axvline(x=signal_start[0], color="r")
+            plt.show()
 
         # 构建一个 preamble
         modulated_preamble = self.modulator.modulate(self.preamble)
@@ -120,7 +122,7 @@ class FSKPackager:
         convolved_signal /= np.max(convolved_signal)
 
         for i in range(len(convolved_signal)):
-            if convolved_signal[i] > 0.9:
+            if convolved_signal[i] >= 0.9:
                 start = i
                 found_start = True
                 break
@@ -130,9 +132,14 @@ class FSKPackager:
 
         plot_signal(convolved_signal, lines=[start, signal_start_value])
 
+        if signal_start_value == -1:
+            signal_start_value = start
+        
         assert (
-            np.abs(start - signal_start_value) <= single_signal_len / 2
+            np.abs(start - signal_start_value) <= single_signal_len
         ), f"preamble 的位置不一致"
+
+        start += single_signal_len # 这里是为了跳过一个信号
 
         # 取得 data_len
         len_data, _ = self.modulator.demodulate(
@@ -144,18 +151,6 @@ class FSKPackager:
         dataload_len = output_packed_bits(len_data)
 
         print(f"数据长度为 {dataload_len}...")
-
-        # 先进行一个滤波
-        carrier_freq = self.modulator.config.carrier_freq
-        freq_width = self.modulator.config.freq_width
-        b, a = sig.iirfilter(
-            5,
-            carrier_freq / 2,
-            btype="highpass",
-            fs=self.modulator.config.sampling_freq,
-        )
-
-        signal = sig.lfilter(b, a, signal)
 
         # 取得 data
         start += (
