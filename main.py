@@ -1,5 +1,6 @@
 import argparse
 from calendar import c
+import datetime
 
 from src.coder import Coder
 from src.modulator import ModulateConfig
@@ -33,18 +34,21 @@ parser.add_argument(
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    string_literal = "123Hello, World! This is a test from FSK! Glad to hear that you can receive this message! Hopefully you can decode this message!"
+    string_literal = "MjnzmdknWGVlRqnEhpcPYINnMKYUankcbNfXeoCxaOviKQilLhNHMziTJaLYikXPZFnPgUjXPHHaPONYneEqtlYQFRRKWdjYTypu"
     if args.mode == "send":
         data = coder.encode(string_literal)
         signal = packager.package(data)
         signal_to_wav("output.wav", signal, 48000)
     elif args.mode == "receive":
-        time = len(string_literal) * 8 * config.signal_duration / (config.bits_per_signal) * 1.5
+        time = len(string_literal) * 8 * config.signal_duration / (config.bits_per_signal) * 1.7
         record_to_wav("received.wav", 48000, time)
         signal = wav_to_signal("received.wav")
         plot_signal(signal)
         data = packager.unpackage(signal)
         string_literal = coder.decode(data)
         print(string_literal)
+        time = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        with open(f"output-{time}.txt", "w", encoding='utf-8') as f:
+            f.write(string_literal)
     else:
         raise NotImplementedError
